@@ -21,9 +21,9 @@ The entire application is built with **pure ES6 JavaScript modules** — no Reac
 | Constraint | Our Approach | Benefit |
 |---|---|---|
 | No framework overhead | Native `<script type="module">` imports | Zero dependency risk, instant load |
-| No build pipeline | Browser-native ES6 module resolution | No `node_modules`, no `package.json` bloat |
+| No build pipeline | Browser-native ES6 module resolution | No `node_modules`, no build-step bloat |
 | No server runtime | Client-side Gemini REST API calls | Fully static hosting (GitHub Pages, CDN) |
-| Repo size < 10 MB | **~27 KB total** (99.7% under budget) | Fast clones, minimal CI overhead |
+| Repo size < 10 MB | **~82 KB total** (99.2% under budget) | Fast clones, minimal CI overhead |
 
 ### Module Dependency Graph
 
@@ -50,15 +50,18 @@ We selected **`gemini-2.5-flash`** as our model for three reasons:
 
 ```
 challenge 4/
-├── .gitignore       561 B
-├── README.md        (this file)
-├── index.html    14,135 B
-└── src/
-    ├── config.js  3,132 B
-    ├── api.js     7,312 B
-    └── app.js     7,845 B
-                  ─────────
-           Total:  ~33 KB   (0.003% of the 10 MB limit)
+├── .gitignore          561 B
+├── package.json        297 B
+├── README.md           (this file)
+├── index.html       24,791 B
+├── src/
+│   ├── config.js     3,132 B
+│   ├── api.js       14,166 B
+│   └── app.js       17,784 B
+└── tests/
+    └── api.test.js   9,037 B
+                     ─────────
+              Total:  ~82 KB   (0.008% of the 10 MB limit)
 ```
 
 **Zero external dependencies** are committed to the repository. Tailwind CSS is loaded via CDN at runtime, ensuring the repo contains only our authored source code.
@@ -125,6 +128,45 @@ Security properties:
 - **Graceful degradation** — If `localStorage` is unavailable (private browsing, restrictive CSP), the module falls back to empty defaults without throwing.
 - **`.gitignore` enforcement** — `.env` files are blocked at the version control level, preventing accidental secret commits.
 
+### Context-Aware Features
+
+#### Real-Time Stadium State Injection
+
+The `stadiumState` object in `api.js` holds live gate traffic data:
+
+```javascript
+export const stadiumState = {
+    gateA: 'High Traffic (85% capacity) - Expect 20 min delays. Divert to Gate C.',
+    gateB: 'Moderate Traffic (40% capacity) - Normal operations.',
+    gateC: 'Low Traffic (15% capacity) - Recommended entry point.',
+};
+```
+
+This object serves a **dual purpose**: (1) it is injected into every Gemini API request via `_buildSystemInstruction()`, so the AI has real-time gate awareness when answering navigation questions; and (2) it is imported by `app.js` and rendered into the Stadium Map panel as a dynamic gate-status list, proving the "real-time decision support" is sourced from a single object — not just described in text.
+
+#### Fan / Staff Persona Switching
+
+The `PERSONA_EXTENSIONS` constant defines two instruction overlays:
+
+| Mode | Tone | Example Details |
+|---|---|---|
+| **Fan** | Warm, friendly, encouraging | Landmark-based directions, amenity suggestions, fun facts |
+| **Staff** | Professional, operational | Zone codes (Z-100, C-3), radio channels, capacity percentages |
+
+Switching is handled by `setPersona(mode)`, which updates `this.persona` and calls `resetHistory()` to clear the conversation context — preventing the model from blending tones across mode changes. The full system instruction is rebuilt on every request by `_buildSystemInstruction()`, which concatenates the base persona, live stadium state, and the active persona extension.
+
+#### Settings Modal
+
+A native `<dialog>` element with `aria-modal="true"` provides a Settings UI. The modal contains a password-masked API key input and a "Save & Connect" button. On save, the key is persisted to `localStorage` via the existing `saveToStorage()` function from `config.js`, the live `GeminiService` instance is updated with `setApiKey()`, and the header status indicator transitions to "Connected" — all without a page reload.
+
+#### Input Validation (500-Character Limit)
+
+The chat input enforces a **500-character maximum** with three layers:
+
+1. **HTML `maxlength`** — The `<input>` element has `maxlength="500"` as a first-pass browser guard.
+2. **Live character counter** — An `input` event listener updates a `0 / 500` counter below the input. The counter color transitions from gray → gold (at 90%) → red (over limit).
+3. **Submit guard** — `handleSubmit()` rejects messages exceeding 500 characters with a visible `role="alert"` error message, preventing the API call entirely.
+
 ---
 
 ## Accessibility Design
@@ -156,9 +198,13 @@ The `polite` assertiveness level ensures announcements **queue behind** the user
 <body>
   ├── <a>           Skip navigation link
   ├── <header>      Banner landmark (role="banner")
+  │   ├── <select>  Persona switcher (aria-label)
+  │   └── <button>  Settings gear (aria-label)
   ├── <main>        Primary content (role="main")
+  │   ├── <section> Operational Intelligence Matrix (3 widgets)
   │   ├── <section> Chat panel (aria-label="AI Chat Assistant")
-  │   └── <section> Map panel (aria-label="Stadium Map")
+  │   └── <section> Map panel → live gate-status list (role="list")
+  ├── <dialog>      Settings modal (aria-modal="true")
   └── <footer>      Content info (role="contentinfo")
 ```
 
@@ -195,6 +241,32 @@ Every `<section>` carries a descriptive `aria-label`. Every decorative SVG icon 
 
 ---
 
+## Testing
+
+The test suite uses **Node's built-in `node --test` runner** (Node 18+) with zero external dependencies — no Jest, Mocha, or npm packages required.
+
+### Running Tests
+
+```bash
+npm test
+# or directly:
+node --test tests/api.test.js
+```
+
+### Test Coverage
+
+The suite contains **3 top-level test groups** with **17 total assertions**:
+
+| Test Group | Subtests | What's Verified |
+|---|---|---|
+| **Input Validation** | 5 | `chat('')`, `chat('   ')`, `chat(null)`, `chat(undefined)` return warning strings; `sendMessage('')` throws |
+| **History Trimming** | 3 | No-op at 10 messages, trims to 10 when exceeded, retains newest messages after trim |
+| **Error Mapping** | 6 | 429 → rate-limit, 500 → server error, 503 → server error, 401 → auth failure, AbortError → timeout, unknown → generic fallback (+ 3 implicit parent tests) |
+
+All tests run against a mock `localStorage` and never hit the network. The `GeminiService` is imported via dynamic `await import()` after the mock is established.
+
+---
+
 ## Quick Start
 
 ```bash
@@ -222,12 +294,15 @@ No `npm install`. No build step. No environment variables. Just serve and go.
 ```
 .
 ├── .gitignore          # Blocks .env, node_modules, OS/IDE artifacts
+├── package.json        # npm test script (node --test), zero dependencies
 ├── README.md           # This document
 ├── index.html          # Semantic HTML5 shell with ARIA landmarks
-└── src/
-    ├── config.js       # Frozen config from localStorage (no hardcoded secrets)
-    ├── api.js          # GeminiService class with multi-turn error recovery
-    └── app.js          # UI orchestration, chat rendering, event wiring
+├── src/
+│   ├── config.js       # Frozen config from localStorage (no hardcoded secrets)
+│   ├── api.js          # GeminiService, stadiumState, persona switching
+│   └── app.js          # UI orchestration, gate rendering, settings modal
+└── tests/
+    └── api.test.js     # Native node:test suite (17 assertions, 0 deps)
 ```
 
 ---

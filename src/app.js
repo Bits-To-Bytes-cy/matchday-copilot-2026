@@ -19,7 +19,7 @@
  */
 
 import config, { saveToStorage } from './config.js';
-import { GeminiService } from './api.js';
+import { GeminiService, stadiumState } from './api.js';
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -44,6 +44,7 @@ const MAX_CHAR_COUNT = 500;
 /** @type {HTMLInputElement}     */ const apiKeyInput      = document.getElementById('api-key-input');
 /** @type {HTMLButtonElement}    */ const settingsSaveBtn  = document.getElementById('settings-save-btn');
 /** @type {HTMLDivElement}       */ const settingsFeedback = document.getElementById('settings-feedback');
+/** @type {HTMLUListElement}     */ const gateStatusList   = document.getElementById('gate-status-list');
 
 // ─── Service Instance ────────────────────────────────────────
 
@@ -321,6 +322,59 @@ const handlePersonaChange = () => {
     appendMessage(`Switched to **${label}**. Conversation history cleared.`, 'ai');
 };
 
+// ─── Gate Status Rendering ───────────────────────────────────
+
+/**
+ * Maps traffic keywords in stadiumState values to visual styling.
+ * Each level gets a distinct dot color and Tailwind text class.
+ *
+ * @param   {string} statusText - The raw status string from stadiumState.
+ * @returns {{ dotColor: string, textClass: string, level: string }}
+ */
+const getTrafficLevel = (statusText) => {
+    const lower = statusText.toLowerCase();
+    if (lower.includes('high'))     return { dotColor: 'bg-red-400',    textClass: 'text-red-400',    level: 'High' };
+    if (lower.includes('moderate')) return { dotColor: 'bg-yellow-400', textClass: 'text-yellow-400', level: 'Moderate' };
+    return                                 { dotColor: 'bg-green-400',  textClass: 'text-green-400',  level: 'Low' };
+};
+
+/**
+ * Renders the stadiumState object into the #gate-status-list <ul>.
+ * Each gate becomes a list item with a colored status dot, the gate
+ * name, a text traffic label, and the full status description.
+ *
+ * This is the same data object injected into the AI's system
+ * instruction via _buildSystemInstruction(), proving the
+ * "real-time decision support" is sourced from a single truth.
+ *
+ * @returns {void}
+ */
+const renderGateStatus = () => {
+    gateStatusList.innerHTML = '';
+
+    const gateNames = { gateA: 'Gate A', gateB: 'Gate B', gateC: 'Gate C' };
+
+    for (const [key, status] of Object.entries(stadiumState)) {
+        const { dotColor, textClass, level } = getTrafficLevel(status);
+        const displayName = gateNames[key] || key;
+
+        const li = document.createElement('li');
+        li.setAttribute('role', 'listitem');
+        li.className = 'bg-stadium-dark rounded-xl px-4 py-3 border border-surface-border';
+
+        li.innerHTML = [
+            `<div class="flex items-center gap-3 mb-1">`,
+            `  <span class="w-2.5 h-2.5 rounded-full ${dotColor} flex-shrink-0" aria-hidden="true"></span>`,
+            `  <span class="text-sm font-semibold text-white">${escapeHtml(displayName)}</span>`,
+            `  <span class="text-xs font-medium ${textClass} ml-auto">${escapeHtml(level)} Traffic</span>`,
+            `</div>`,
+            `<p class="text-xs text-gray-400 leading-relaxed pl-5.5">${escapeHtml(status)}</p>`,
+        ].join('\n');
+
+        gateStatusList.appendChild(li);
+    }
+};
+
 // ─── Event Handlers ──────────────────────────────────────────
 
 /**
@@ -415,4 +469,7 @@ personaSelect.addEventListener('change', handlePersonaChange);
 
     /* Initialize character counter */
     updateCharCount();
+
+    /* Render gate status from stadiumState */
+    renderGateStatus();
 })();
