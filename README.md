@@ -31,10 +31,11 @@ The entire application is built with **pure ES6 JavaScript modules** — no Reac
 index.html
   └── src/app.js          (UI orchestration, event wiring)
         ├── src/config.js  (secure runtime configuration)
-        └── src/api.js     (GeminiService — API communication)
+        ├── src/api.js     (GeminiService, stadiumState)
+        └── src/utils.js   (pure UI helper functions)
 ```
 
-Every module has a **single responsibility** with no circular dependencies. The dependency flow is strictly **unidirectional**: `app.js` → `api.js` → `config.js`.
+Every module has a **single responsibility** with no circular dependencies. The dependency flow is strictly **unidirectional**: `app.js` → `api.js` / `utils.js` → `config.js`.
 
 ### Why gemini-2.5-flash
 
@@ -51,17 +52,21 @@ We selected **`gemini-2.5-flash`** as our model for three reasons:
 ```
 challenge 4/
 ├── .gitignore          561 B
-├── package.json        297 B
+├── .prettierrc.json    133 B
+├── eslint.config.js  1,097 B
+├── package.json        329 B
 ├── README.md           (this file)
 ├── index.html       24,791 B
 ├── src/
 │   ├── config.js     3,132 B
 │   ├── api.js       14,166 B
-│   └── app.js       17,784 B
+│   ├── app.js       15,529 B
+│   └── utils.js      3,711 B
 └── tests/
-    └── api.test.js   9,037 B
+    ├── api.test.js   9,037 B
+    └── utils.test.js 8,552 B
                      ─────────
-              Total:  ~82 KB   (0.008% of the 10 MB limit)
+              Total:  ~97 KB   (0.01% of the 10 MB limit)
 ```
 
 **Zero external dependencies** are committed to the repository. Tailwind CSS is loaded via CDN at runtime, ensuring the repo contains only our authored source code.
@@ -250,20 +255,28 @@ The test suite uses **Node's built-in `node --test` runner** (Node 18+) with zer
 ```bash
 npm test
 # or directly:
-node --test tests/api.test.js
+node --test tests/*.test.js
 ```
 
 ### Test Coverage
 
-The suite contains **3 top-level test groups** with **17 total assertions**:
+The suite contains **7 top-level test groups** across two files (`api.test.js` and `utils.test.js`), with **41 total assertions**:
 
-| Test Group | Subtests | What's Verified |
+| Module Under Test | What's Verified | Assertions |
 |---|---|---|
-| **Input Validation** | 5 | `chat('')`, `chat('   ')`, `chat(null)`, `chat(undefined)` return warning strings; `sendMessage('')` throws |
-| **History Trimming** | 3 | No-op at 10 messages, trims to 10 when exceeded, retains newest messages after trim |
-| **Error Mapping** | 6 | 429 → rate-limit, 500 → server error, 503 → server error, 401 → auth failure, AbortError → timeout, unknown → generic fallback (+ 3 implicit parent tests) |
+| **`api.js`** | Input validation (`chat('')` rejection), history trimming (caps at 10), and detailed error mapping (429/500/etc.). | 17 |
+| **`utils.js`** | `escapeHtml` (XSS safety), `renderMarkdown` (formatting & `<script>` escaping), `getTrafficLevel` (status logic), and `getCharCountStyle` (CSS threshold math). | 24 |
 
-All tests run against a mock `localStorage` and never hit the network. The `GeminiService` is imported via dynamic `await import()` after the mock is established.
+All tests run against a mock `localStorage` and a mocked `document` stub, ensuring they never hit the network or require a browser environment.
+
+### Linting & Formatting
+
+The project uses ESLint and Prettier for maintaining consistent code style. These are dev-only dependencies run via `npx` (no `node_modules` required):
+
+```bash
+npm run lint
+# internally executes: npx eslint src tests
+```
 
 ---
 
@@ -294,15 +307,19 @@ No `npm install`. No build step. No environment variables. Just serve and go.
 ```
 .
 ├── .gitignore          # Blocks .env, node_modules, OS/IDE artifacts
-├── package.json        # npm test script (node --test), zero dependencies
+├── .prettierrc.json    # Code formatting rules
+├── eslint.config.js    # Dev-only linting rules (ESLint 9 Flat Config)
+├── package.json        # npm scripts (test, lint), zero dependencies
 ├── README.md           # This document
 ├── index.html          # Semantic HTML5 shell with ARIA landmarks
 ├── src/
 │   ├── config.js       # Frozen config from localStorage (no hardcoded secrets)
 │   ├── api.js          # GeminiService, stadiumState, persona switching
-│   └── app.js          # UI orchestration, gate rendering, settings modal
+│   ├── app.js          # UI orchestration, gate rendering, settings modal
+│   └── utils.js        # Pure, side-effect-free helper functions
 └── tests/
-    └── api.test.js     # Native node:test suite (17 assertions, 0 deps)
+    ├── api.test.js     # Native API unit tests (17 assertions, 0 deps)
+    └── utils.test.js   # Native utils unit tests (24 assertions, 0 deps)
 ```
 
 ---

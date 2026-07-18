@@ -15,11 +15,16 @@
  *    • Persona mode switching (Fan / Staff)
  *    • Basic markdown rendering for AI responses
  *
+ *  Note: Pure logic formatting/utility functions have been extracted
+ *  to utils.js so this module only handles DOM references,
+ *  rendering, and event wiring.
+ *
  *  @module app
  */
 
 import config, { saveToStorage } from './config.js';
 import { GeminiService, stadiumState } from './api.js';
+import { escapeHtml, renderMarkdown, getTrafficLevel, getCharCountStyle } from './utils.js';
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -55,49 +60,6 @@ const gemini = new GeminiService();
 
 /** @type {boolean} Prevents duplicate submissions while awaiting a response */
 let isProcessing = false;
-
-// ─── Utility Functions ───────────────────────────────────────
-
-/**
- * Sanitizes a string to prevent XSS when inserting into innerHTML.
- *
- * @param   {string} str - The raw string to sanitize.
- * @returns {string} The escaped, safe-to-render string.
- */
-const escapeHtml = (str) => {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-};
-
-/**
- * Converts basic markdown formatting into safe HTML for display.
- * Supports: **bold**, *italic*, `inline code`, ```code blocks```,
- * and newline-to-<br> conversion.
- *
- * @param   {string} text - Raw text potentially containing markdown.
- * @returns {string} HTML string safe for innerHTML insertion.
- */
-const renderMarkdown = (text) => {
-    let html = escapeHtml(text);
-
-    // Code blocks: ```...``` → <pre><code>...</code></pre>
-    html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-stadium-dark rounded-lg p-3 my-2 text-xs overflow-x-auto"><code>$1</code></pre>');
-
-    // Inline code: `...` → <code>...</code>
-    html = html.replace(/`([^`]+)`/g, '<code class="bg-stadium-dark px-1.5 py-0.5 rounded text-accent-cyan text-xs">$1</code>');
-
-    // Bold: **...** → <strong>...</strong>
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="text-white font-semibold">$1</strong>');
-
-    // Italic: *...* → <em>...</em>
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-    // Newlines → <br>
-    html = html.replace(/\n/g, '<br>');
-
-    return html;
-};
 
 // ─── Chat Functions ──────────────────────────────────────────
 
@@ -213,17 +175,13 @@ const updateCharCount = () => {
     const len = chatInput.value.length;
     charCountDisplay.textContent = `${len} / ${MAX_CHAR_COUNT}`;
 
-    if (len > MAX_CHAR_COUNT) {
-        charCountDisplay.classList.add('text-red-400');
-        charCountDisplay.classList.remove('text-gray-600', 'text-accent-gold');
+    const style = getCharCountStyle(len, MAX_CHAR_COUNT);
+    charCountDisplay.classList.add(style.addClass);
+    charCountDisplay.classList.remove(...style.removeClasses);
+
+    if (style.state === 'over') {
         showInputError(`Message exceeds ${MAX_CHAR_COUNT} characters. Please shorten it.`);
-    } else if (len > MAX_CHAR_COUNT * 0.9) {
-        charCountDisplay.classList.add('text-accent-gold');
-        charCountDisplay.classList.remove('text-gray-600', 'text-red-400');
-        hideInputError();
     } else {
-        charCountDisplay.classList.add('text-gray-600');
-        charCountDisplay.classList.remove('text-accent-gold', 'text-red-400');
         hideInputError();
     }
 };
@@ -325,20 +283,6 @@ const handlePersonaChange = () => {
 // ─── Gate Status Rendering ───────────────────────────────────
 
 /**
- * Maps traffic keywords in stadiumState values to visual styling.
- * Each level gets a distinct dot color and Tailwind text class.
- *
- * @param   {string} statusText - The raw status string from stadiumState.
- * @returns {{ dotColor: string, textClass: string, level: string }}
- */
-const getTrafficLevel = (statusText) => {
-    const lower = statusText.toLowerCase();
-    if (lower.includes('high'))     return { dotColor: 'bg-red-400',    textClass: 'text-red-400',    level: 'High' };
-    if (lower.includes('moderate')) return { dotColor: 'bg-yellow-400', textClass: 'text-yellow-400', level: 'Moderate' };
-    return                                 { dotColor: 'bg-green-400',  textClass: 'text-green-400',  level: 'Low' };
-};
-
-/**
  * Renders the stadiumState object into the #gate-status-list <ul>.
  * Each gate becomes a list item with a colored status dot, the gate
  * name, a text traffic label, and the full status description.
@@ -350,8 +294,7 @@ const getTrafficLevel = (statusText) => {
  * @returns {void}
  */
 const renderGateStatus = () => {
-    gateStatusList.innerHTML = '';
-
+    const fragment = document.createDocumentFragment();
     const gateNames = { gateA: 'Gate A', gateB: 'Gate B', gateC: 'Gate C' };
 
     for (const [key, status] of Object.entries(stadiumState)) {
@@ -371,8 +314,11 @@ const renderGateStatus = () => {
             `<p class="text-xs text-gray-400 leading-relaxed pl-5.5">${escapeHtml(status)}</p>`,
         ].join('\n');
 
-        gateStatusList.appendChild(li);
+        fragment.appendChild(li);
     }
+
+    gateStatusList.innerHTML = '';
+    gateStatusList.appendChild(fragment);
 };
 
 // ─── Event Handlers ──────────────────────────────────────────
