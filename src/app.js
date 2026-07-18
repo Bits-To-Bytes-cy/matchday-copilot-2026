@@ -9,25 +9,41 @@
  *  Responsibilities:
  *    • Chat message rendering with smooth animations
  *    • Input state management (disable during API calls)
+ *    • Character count validation (500 char limit)
  *    • Typing indicator lifecycle
- *    • Keyboard accessibility (Enter to send)
+ *    • Settings modal (API key persistence)
+ *    • Persona mode switching (Fan / Staff)
  *    • Basic markdown rendering for AI responses
  *
  *  @module app
  */
 
-import config from './config.js';
+import config, { saveToStorage } from './config.js';
 import { GeminiService } from './api.js';
+
+// ─── Constants ───────────────────────────────────────────────
+
+/** @type {number} Maximum characters allowed per chat message */
+const MAX_CHAR_COUNT = 500;
 
 // ─── DOM References ──────────────────────────────────────────
 
-/** @type {HTMLFormElement}   */ const chatForm        = document.getElementById('chat-form');
-/** @type {HTMLInputElement}  */ const chatInput       = document.getElementById('chat-input');
-/** @type {HTMLButtonElement} */ const sendBtn         = document.getElementById('send-btn');
-/** @type {HTMLDivElement}    */ const chatMessages    = document.getElementById('chat-messages');
-/** @type {HTMLDivElement}    */ const typingIndicator = document.getElementById('typing-indicator');
-/** @type {HTMLSpanElement}   */ const statusDot       = document.getElementById('status-dot');
-/** @type {HTMLSpanElement}   */ const statusText      = document.getElementById('status-text');
+/** @type {HTMLFormElement}      */ const chatForm         = document.getElementById('chat-form');
+/** @type {HTMLInputElement}     */ const chatInput        = document.getElementById('chat-input');
+/** @type {HTMLButtonElement}    */ const sendBtn          = document.getElementById('send-btn');
+/** @type {HTMLDivElement}       */ const chatMessages     = document.getElementById('chat-messages');
+/** @type {HTMLDivElement}       */ const typingIndicator  = document.getElementById('typing-indicator');
+/** @type {HTMLSpanElement}      */ const statusDot        = document.getElementById('status-dot');
+/** @type {HTMLSpanElement}      */ const statusText       = document.getElementById('status-text');
+/** @type {HTMLSpanElement}      */ const charCountDisplay = document.getElementById('char-count-display');
+/** @type {HTMLSpanElement}      */ const inputErrorMsg    = document.getElementById('input-error-msg');
+/** @type {HTMLSelectElement}    */ const personaSelect    = document.getElementById('persona-select');
+/** @type {HTMLButtonElement}    */ const settingsBtn      = document.getElementById('settings-btn');
+/** @type {HTMLDialogElement}    */ const settingsDialog   = document.getElementById('settings-dialog');
+/** @type {HTMLButtonElement}    */ const settingsCloseBtn = document.getElementById('settings-close-btn');
+/** @type {HTMLInputElement}     */ const apiKeyInput      = document.getElementById('api-key-input');
+/** @type {HTMLButtonElement}    */ const settingsSaveBtn  = document.getElementById('settings-save-btn');
+/** @type {HTMLDivElement}       */ const settingsFeedback = document.getElementById('settings-feedback');
 
 // ─── Service Instance ────────────────────────────────────────
 
@@ -43,7 +59,6 @@ let isProcessing = false;
 
 /**
  * Sanitizes a string to prevent XSS when inserting into innerHTML.
- * Escapes all HTML-significant characters.
  *
  * @param   {string} str - The raw string to sanitize.
  * @returns {string} The escaped, safe-to-render string.
@@ -124,11 +139,9 @@ const appendMessage = (text, sender) => {
     ].join(' ');
 
     if (isUser) {
-        // User messages: plain escaped text (no markdown)
         bubble.textContent = text;
         wrapper.classList.add('flex-row-reverse');
     } else {
-        // AI messages: render markdown formatting
         bubble.innerHTML = renderMarkdown(text);
     }
 
@@ -136,11 +149,7 @@ const appendMessage = (text, sender) => {
     wrapper.appendChild(bubble);
     chatMessages.appendChild(wrapper);
 
-    /* ── Smooth scroll to latest message ── */
-    chatMessages.scrollTo({
-        top: chatMessages.scrollHeight,
-        behavior: 'smooth',
-    });
+    chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
 };
 
 /**
@@ -154,19 +163,13 @@ const showTyping = (visible) => {
     typingIndicator.setAttribute('aria-label',
         visible ? 'Assistant is typing a response' : ''
     );
-
     if (visible) {
-        /* Scroll to show the indicator */
-        chatMessages.scrollTo({
-            top: chatMessages.scrollHeight,
-            behavior: 'smooth',
-        });
+        chatMessages.scrollTo({ top: chatMessages.scrollHeight, behavior: 'smooth' });
     }
 };
 
 /**
  * Toggles the interactive state of the chat input and send button.
- * Prevents duplicate submissions while the API is processing.
  *
  * @param {boolean} disabled - True to disable, false to re-enable.
  * @returns {void}
@@ -175,12 +178,9 @@ const setInputDisabled = (disabled) => {
     chatInput.disabled = disabled;
     sendBtn.disabled   = disabled;
     sendBtn.setAttribute('aria-disabled', String(disabled));
-
-    if (disabled) {
-        chatInput.setAttribute('placeholder', 'Waiting for response...');
-    } else {
-        chatInput.setAttribute('placeholder', 'Ask about the stadium, matches, food...');
-    }
+    chatInput.setAttribute('placeholder',
+        disabled ? 'Waiting for response...' : 'Ask about the stadium, matches, food...'
+    );
 };
 
 /**
@@ -195,20 +195,140 @@ const setStatus = (state) => {
         error:     { dot: 'bg-red-400',                 text: 'Error' },
         loading:   { dot: 'bg-yellow-400 animate-pulse', text: 'Sending...' },
     };
-
     const { dot, text } = styles[state] || styles.connected;
-
-    statusDot.className  = `w-2 h-2 rounded-full ${dot}`;
+    statusDot.className    = `w-2 h-2 rounded-full ${dot}`;
     statusText.textContent = text;
+};
+
+// ─── Character Counter ───────────────────────────────────────
+
+/**
+ * Updates the character count display and shows/hides the error
+ * message when the limit is approached or exceeded.
+ *
+ * @returns {void}
+ */
+const updateCharCount = () => {
+    const len = chatInput.value.length;
+    charCountDisplay.textContent = `${len} / ${MAX_CHAR_COUNT}`;
+
+    if (len > MAX_CHAR_COUNT) {
+        charCountDisplay.classList.add('text-red-400');
+        charCountDisplay.classList.remove('text-gray-600', 'text-accent-gold');
+        showInputError(`Message exceeds ${MAX_CHAR_COUNT} characters. Please shorten it.`);
+    } else if (len > MAX_CHAR_COUNT * 0.9) {
+        charCountDisplay.classList.add('text-accent-gold');
+        charCountDisplay.classList.remove('text-gray-600', 'text-red-400');
+        hideInputError();
+    } else {
+        charCountDisplay.classList.add('text-gray-600');
+        charCountDisplay.classList.remove('text-accent-gold', 'text-red-400');
+        hideInputError();
+    }
+};
+
+/**
+ * Displays a validation error below the input.
+ *
+ * @param {string} message - The error text to show.
+ * @returns {void}
+ */
+const showInputError = (message) => {
+    inputErrorMsg.textContent = message;
+    inputErrorMsg.classList.remove('hidden');
+};
+
+/**
+ * Hides the validation error below the input.
+ *
+ * @returns {void}
+ */
+const hideInputError = () => {
+    inputErrorMsg.textContent = '';
+    inputErrorMsg.classList.add('hidden');
+};
+
+// ─── Settings Modal ──────────────────────────────────────────
+
+/**
+ * Opens the settings dialog as a modal.
+ * Pre-fills the API key field if a key exists.
+ *
+ * @returns {void}
+ */
+const openSettings = () => {
+    /* Pre-fill with existing key (masked in the input type=password) */
+    apiKeyInput.value = gemini.apiKey || '';
+    settingsFeedback.classList.add('hidden');
+    settingsDialog.showModal();
+};
+
+/**
+ * Closes the settings dialog.
+ *
+ * @returns {void}
+ */
+const closeSettings = () => {
+    settingsDialog.close();
+};
+
+/**
+ * Saves the API key to localStorage, updates the GeminiService
+ * instance, and provides visual feedback.
+ *
+ * @returns {void}
+ */
+const saveSettings = () => {
+    const key = apiKeyInput.value.trim();
+
+    if (!key) {
+        settingsFeedback.textContent = '⚠️ Please enter a valid API key.';
+        settingsFeedback.className = 'text-sm rounded-lg px-4 py-2 bg-red-500/10 text-red-400';
+        settingsFeedback.classList.remove('hidden');
+        return;
+    }
+
+    /* Persist to localStorage */
+    saveToStorage('gemini_api_key', key);
+
+    /* Update the live service instance */
+    gemini.setApiKey(key);
+
+    /* Visual feedback */
+    settingsFeedback.textContent = '✅ API key saved. You are now connected!';
+    settingsFeedback.className = 'text-sm rounded-lg px-4 py-2 bg-green-500/10 text-green-400';
+    settingsFeedback.classList.remove('hidden');
+
+    setStatus('connected');
+
+    /* Auto-close after brief confirmation */
+    setTimeout(() => closeSettings(), 1200);
+};
+
+// ─── Persona Switching ───────────────────────────────────────
+
+/**
+ * Handles persona mode changes from the dropdown.
+ * Updates the GeminiService and appends a system message.
+ *
+ * @returns {void}
+ */
+const handlePersonaChange = () => {
+    const mode = personaSelect.value;
+    gemini.setPersona(mode);
+
+    const label = mode === 'staff' ? '🛡️ Staff/Volunteer Mode' : '⚽ Fan Mode';
+    appendMessage(`Switched to **${label}**. Conversation history cleared.`, 'ai');
 };
 
 // ─── Event Handlers ──────────────────────────────────────────
 
 /**
- * Handles chat form submission: validates input, renders the user
- * message, calls GeminiService, and displays the AI response.
- *
- * Guards against double-submission with the `isProcessing` flag.
+ * Handles chat form submission with full validation pipeline:
+ *  1. Double-submission guard
+ *  2. Empty message guard
+ *  3. Character limit guard (500 chars)
+ *  4. API call with typing indicator
  *
  * @param {SubmitEvent} event - The form submit event.
  * @returns {Promise<void>}
@@ -216,15 +336,25 @@ const setStatus = (state) => {
 const handleSubmit = async (event) => {
     event.preventDefault();
 
-    /* ── Guard: prevent double-submission ── */
     if (isProcessing) return;
 
     const message = chatInput.value.trim();
+
+    /* ── Guard: empty ── */
     if (!message) return;
+
+    /* ── Guard: character limit ── */
+    if (message.length > MAX_CHAR_COUNT) {
+        showInputError(`Message is ${message.length - MAX_CHAR_COUNT} characters over the limit.`);
+        return;
+    }
+
+    hideInputError();
 
     /* ── Render user message & reset input ── */
     appendMessage(message, 'user');
     chatInput.value = '';
+    updateCharCount();
 
     /* ── Lock UI during API call ── */
     isProcessing = true;
@@ -242,21 +372,30 @@ const handleSubmit = async (event) => {
     setStatus('connected');
 
     appendMessage(reply, 'ai');
-
-    /* ── Return focus to input for next message ── */
     chatInput.focus();
 };
 
 // ─── Event Listeners ─────────────────────────────────────────
 
+/* Chat */
 chatForm.addEventListener('submit', handleSubmit);
+chatInput.addEventListener('input', updateCharCount);
+
+/* Settings modal */
+settingsBtn.addEventListener('click', openSettings);
+settingsCloseBtn.addEventListener('click', closeSettings);
+settingsSaveBtn.addEventListener('click', saveSettings);
+
+/* Close dialog on backdrop click */
+settingsDialog.addEventListener('click', (e) => {
+    if (e.target === settingsDialog) closeSettings();
+});
+
+/* Persona switching */
+personaSelect.addEventListener('change', handlePersonaChange);
 
 // ─── Initialization ──────────────────────────────────────────
 
-/**
- * Self-invoking initialization routine.
- * Logs startup state and warns if no API key is configured.
- */
 (() => {
     console.info(
         '%c⚽ MatchDay Copilot initialized',
@@ -265,9 +404,7 @@ chatForm.addEventListener('submit', handleSubmit);
 
     if (!config.geminiApiKey) {
         console.info(
-            '%c🔑 No API key found. Run in console:\n'
-            + '   localStorage.setItem("matchday_copilot_gemini_api_key", "YOUR_KEY");\n'
-            + '   Then refresh the page.',
+            '%c🔑 No API key found. Click the ⚙️ Settings gear to configure.',
             'color: #f5a623; font-size: 12px;'
         );
         setStatus('error');
@@ -275,4 +412,7 @@ chatForm.addEventListener('submit', handleSubmit);
         setStatus('connected');
         console.info('%c✅ API key detected', 'color: #4ade80;');
     }
+
+    /* Initialize character counter */
+    updateCharCount();
 })();

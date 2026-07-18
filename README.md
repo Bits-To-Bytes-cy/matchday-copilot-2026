@@ -36,9 +36,9 @@ index.html
 
 Every module has a **single responsibility** with no circular dependencies. The dependency flow is strictly **unidirectional**: `app.js` → `api.js` → `config.js`.
 
-### Why gemini-2.0-flash
+### Why gemini-2.5-flash
 
-We selected **`gemini-2.0-flash`** as our model for three reasons:
+We selected **`gemini-2.5-flash`** as our model for three reasons:
 
 1. **Low Latency** — Stadium environments demand sub-second perceived response times. Fans standing in crowded concourses will not wait 5+ seconds for directions. The `flash` variant is optimized for speed-first generation, making it ideal for concise, practical Q&A.
 
@@ -189,7 +189,7 @@ Every `<section>` carries a descriptive `aria-label`. Every decorative SVG icon 
 | **Structure** | Semantic HTML5 | Accessible, SEO-friendly, zero overhead |
 | **Styling** | Tailwind CSS (CDN) | Rapid utility-first styling, no local build |
 | **Logic** | Vanilla ES6 Modules | Native browser support, no transpilation |
-| **AI Model** | Gemini 2.0 Flash | Low-latency, cost-efficient generation |
+| **AI Model** | Gemini 2.5 Flash | Low-latency, cost-efficient generation |
 | **Config** | localStorage | Client-side secret storage, no backend |
 | **Hosting** | Static (any CDN) | GitHub Pages, Firebase Hosting, Vercel |
 

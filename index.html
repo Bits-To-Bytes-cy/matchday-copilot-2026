@@ -94,6 +94,29 @@
             outline: 2px solid #00d4ff;
             outline-offset: 2px;
         }
+
+        /* ── Settings Dialog ── */
+        dialog::backdrop {
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+        dialog {
+            background: transparent;
+            border: none;
+            padding: 0;
+            max-width: 28rem;
+            width: 90%;
+        }
+        dialog[open] {
+            animation: dialogFadeIn 0.25s ease-out;
+        }
+        @keyframes dialogFadeIn {
+            from { opacity: 0; transform: scale(0.95) translateY(8px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        /* ── Character Counter ── */
+        .char-counter { transition: color 0.2s ease; }
     </style>
 </head>
 
@@ -126,13 +149,39 @@
             </h1>
         </div>
 
-        <!-- Status Badge -->
-        <div class="flex items-center gap-2 text-xs text-gray-400"
-             role="status"
-             aria-live="polite"
-             aria-label="Connection status">
-            <span id="status-dot" class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            <span id="status-text">Connected</span>
+        <!-- Status Badge + Persona Selector + Settings Gear -->
+        <div class="flex items-center gap-3">
+
+            <!-- Persona Selector -->
+            <label for="persona-select" class="sr-only">Select assistant persona</label>
+            <select id="persona-select"
+                    aria-label="Switch between Fan and Staff assistant modes"
+                    class="bg-stadium-dark border border-surface-border rounded-lg px-3 py-1.5 text-xs text-gray-300 focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan cursor-pointer">
+                <option value="fan">⚽ Fan Mode</option>
+                <option value="staff">🛡️ Staff Mode</option>
+            </select>
+
+            <!-- Status Badge -->
+            <div class="flex items-center gap-2 text-xs text-gray-400"
+                 role="status"
+                 aria-live="polite"
+                 aria-label="Connection status">
+                <span id="status-dot" class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                <span id="status-text">Connected</span>
+            </div>
+
+            <!-- Settings Gear Button -->
+            <button id="settings-btn"
+                    type="button"
+                    aria-label="Open settings"
+                    class="w-9 h-9 rounded-lg border border-surface-border flex items-center justify-center text-gray-400 hover:text-accent-cyan hover:border-accent-cyan transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+            </button>
         </div>
     </header>
 
@@ -140,8 +189,77 @@
          MAIN CONTENT
          ════════════════════════════════════════════ -->
     <main id="main-content"
-          class="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 p-4 lg:p-6 overflow-hidden"
+          class="flex-1 flex flex-col gap-4 p-4 lg:p-6 overflow-hidden"
           role="main">
+
+        <!-- ════════════════════════════════════════════
+             OPERATIONAL INTELLIGENCE MATRIX
+             ════════════════════════════════════════════ -->
+        <section class="grid grid-cols-1 md:grid-cols-3 gap-4"
+                 aria-label="Stadium Operational Intelligence Matrix">
+
+            <!-- Widget 1 — Crowd Management -->
+            <div class="glass px-5 py-4 flex items-start gap-4"
+                 role="region"
+                 aria-label="Crowd Management Status">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-cyan to-blue-600 flex items-center justify-center flex-shrink-0"
+                     aria-hidden="true">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold text-accent-cyan uppercase tracking-wider">Crowd Management</h3>
+                    <p class="text-sm text-gray-200 mt-1 leading-snug">
+                        <strong class="text-white">Gate 3 Peak Flow Optimization</strong> — AI-driven lane balancing active. Current throughput: <span class="text-accent-cyan font-semibold">1,240 fans/min</span>.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Widget 2 — Transportation -->
+            <div class="glass px-5 py-4 flex items-start gap-4"
+                 role="region"
+                 aria-label="Transportation Status">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-accent-gold to-orange-500 flex items-center justify-center flex-shrink-0"
+                     aria-hidden="true">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold text-accent-gold uppercase tracking-wider">Transportation</h3>
+                    <p class="text-sm text-gray-200 mt-1 leading-snug">
+                        <strong class="text-white">Metro Express shuttle loops active</strong> — Route A/B cycling every 8 min. Next departure: <span class="text-accent-gold font-semibold">3 min</span>.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Widget 3 — Sustainability Tracker -->
+            <div class="glass px-5 py-4 flex items-start gap-4"
+                 role="region"
+                 aria-label="Sustainability Tracker">
+                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-green-400 to-emerald-600 flex items-center justify-center flex-shrink-0"
+                     aria-hidden="true">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold text-green-400 uppercase tracking-wider">Sustainability Tracker</h3>
+                    <p class="text-sm text-gray-200 mt-1 leading-snug">
+                        <strong class="text-white">Zero-Waste Directive</strong> — <span class="text-green-400 font-semibold">94% diversion rate</span> achieved. Compost & recycling bins at full capacity rotation.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ════════════════════════════════════════════
+             CHAT & MAP GRID
+             ════════════════════════════════════════════ -->
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-5 gap-4 overflow-hidden">
 
         <!-- ──────────────────────────────────────
              CHAT PANEL  (3 / 5 columns on lg)
@@ -193,28 +311,43 @@
                 </div>
             </div>
 
-            <!-- Chat Input -->
             <form id="chat-form"
-                  class="p-4 border-t border-surface-border flex items-center gap-3"
+                  class="p-4 border-t border-surface-border"
                   aria-label="Send a message">
 
-                <label for="chat-input" class="sr-only">Type your message</label>
-                <input id="chat-input"
-                       type="text"
-                       placeholder="Ask about the stadium, matches, food..."
-                       autocomplete="off"
-                       aria-label="Type your message to the stadium assistant"
-                       class="flex-1 bg-stadium-dark border border-surface-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan transition-colors" />
+                <!-- Input Row -->
+                <div class="flex items-center gap-3">
+                    <label for="chat-input" class="sr-only">Type your message</label>
+                    <input id="chat-input"
+                           type="text"
+                           maxlength="500"
+                           placeholder="Ask about the stadium, matches, food..."
+                           autocomplete="off"
+                           aria-label="Type your message to the stadium assistant"
+                           aria-describedby="char-count-display input-error-msg"
+                           class="flex-1 bg-stadium-dark border border-surface-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan transition-colors" />
 
-                <button id="send-btn"
-                        type="submit"
-                        aria-label="Send message"
-                        class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-cyan to-accent-magenta flex items-center justify-center text-white hover:opacity-90 transition-opacity focus:ring-2 focus:ring-accent-cyan focus:ring-offset-2 focus:ring-offset-stadium-dark">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                </button>
+                    <button id="send-btn"
+                            type="submit"
+                            aria-label="Send message"
+                            class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-cyan to-accent-magenta flex items-center justify-center text-white hover:opacity-90 transition-opacity focus:ring-2 focus:ring-accent-cyan focus:ring-offset-2 focus:ring-offset-stadium-dark">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Character Counter & Error Row -->
+                <div class="flex items-center justify-between mt-2 px-1">
+                    <span id="input-error-msg"
+                          class="text-xs text-red-400 hidden"
+                          role="alert"
+                          aria-live="assertive"></span>
+                    <span id="char-count-display"
+                          class="char-counter text-xs text-gray-600 ml-auto"
+                          aria-label="Character count">0 / 500</span>
+                </div>
             </form>
         </section>
 
@@ -257,6 +390,7 @@
                 </div>
             </div>
         </section>
+        </div> <!-- /chat-map-grid -->
     </main>
 
     <!-- ════════════════════════════════════════════
@@ -266,6 +400,54 @@
             role="contentinfo">
         <p>MatchDay Copilot &copy; 2026 — FIFA World Cup Smart Stadium Challenge</p>
     </footer>
+
+    <!-- ════════════════════════════════════════════
+         SETTINGS DIALOG (Accessible Modal)
+         ════════════════════════════════════════════ -->
+    <dialog id="settings-dialog"
+            aria-label="Settings"
+            aria-modal="true">
+        <div class="glass p-6 space-y-5">
+            <!-- Dialog Header -->
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-bold text-white">Settings</h2>
+                <button id="settings-close-btn"
+                        type="button"
+                        aria-label="Close settings"
+                        class="w-8 h-8 rounded-lg border border-surface-border flex items-center justify-center text-gray-400 hover:text-white hover:border-white transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- API Key Input -->
+            <div class="space-y-2">
+                <label for="api-key-input" class="text-sm font-medium text-gray-300">Gemini API Key</label>
+                <input id="api-key-input"
+                       type="password"
+                       placeholder="Paste your API key here..."
+                       autocomplete="off"
+                       aria-label="Enter your Gemini API key"
+                       class="w-full bg-stadium-dark border border-surface-border rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:border-accent-cyan focus:ring-1 focus:ring-accent-cyan transition-colors" />
+                <p class="text-xs text-gray-500">Your key is stored locally in this browser only. Never shared.</p>
+            </div>
+
+            <!-- Status Feedback -->
+            <div id="settings-feedback"
+                 class="text-sm hidden rounded-lg px-4 py-2"
+                 role="status"
+                 aria-live="polite"></div>
+
+            <!-- Save Button -->
+            <button id="settings-save-btn"
+                    type="button"
+                    aria-label="Save API key"
+                    class="w-full py-2.5 rounded-xl bg-gradient-to-r from-accent-cyan to-accent-magenta text-white font-semibold text-sm hover:opacity-90 transition-opacity focus:ring-2 focus:ring-accent-cyan focus:ring-offset-2 focus:ring-offset-stadium-dark">
+                Save &amp; Connect
+            </button>
+        </div>
+    </dialog>
 
     <!-- ════════════════════════════════════════════
          APPLICATION SCRIPTS (ES6 Modules)

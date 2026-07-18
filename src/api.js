@@ -19,9 +19,9 @@ import config from './config.js';
 
 // ─── Constants ───────────────────────────────────────────────
 
-/** @type {string} Gemini REST API endpoint for the specified model */
-const GEMINI_ENDPOINT =
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+/** @type {string} Base URL for the Gemini REST API (model appended dynamically) */
+const GEMINI_BASE_URL =
+    'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** @type {number} Request timeout in milliseconds (15 s) */
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -41,6 +41,37 @@ const SYSTEM_PERSONA = [
     'Translate automatically if the user speaks a different language.',
 ].join(' ');
 
+/**
+ * Real-time in-memory stadium state representing live gate traffic.
+ * In production, this would be fed by IoT sensors / venue APIs.
+ *
+ * @type {Object<string, string>}
+ */
+export const stadiumState = {
+    gateA: 'High Traffic (85% capacity) - Expect 20 min delays. Divert to Gate C.',
+    gateB: 'Moderate Traffic (40% capacity) - Normal operations.',
+    gateC: 'Low Traffic (15% capacity) - Recommended entry point.',
+};
+
+/**
+ * Persona-specific instruction extensions.
+ * Appended to the base persona based on the active mode.
+ *
+ * @type {Object<string, string>}
+ */
+const PERSONA_EXTENSIONS = {
+    fan: [
+        'You are speaking to a fan. Use a warm, friendly, and encouraging tone.',
+        'Give simple directions with landmarks ("near the big screen", "past the food court").',
+        'Suggest nearby amenities, fun facts, and fan experience tips.',
+    ].join(' '),
+    staff: [
+        'You are speaking to a staff member or volunteer. Use a professional, operational tone.',
+        'Include zone codes (e.g., Z-100, C-3), radio channel references, and capacity percentages.',
+        'Prioritize crowd safety, incident protocols, and operational efficiency.',
+    ].join(' '),
+};
+
 // ─── GeminiService Class ─────────────────────────────────────
 
 /**
@@ -49,6 +80,8 @@ const SYSTEM_PERSONA = [
  * @example
  *   const gemini = new GeminiService();
  *   const reply  = await gemini.chat('Where is Gate A?');
+ *   // Or use the strict variant:
+ *   const reply2 = await gemini.sendMessage('Where is Gate A?');
  */
 export class GeminiService {
 
@@ -61,6 +94,12 @@ export class GeminiService {
     constructor(apiKey = '') {
         /** @type {string} The API key used for authentication */
         this.apiKey = apiKey || config.geminiApiKey;
+
+        /**
+         * Active persona mode — determines the AI's tone and detail level.
+         * @type {'fan'|'staff'}
+         */
+        this.persona = 'fan';
 
         /**
          * Multi-turn conversation history.
@@ -125,6 +164,33 @@ export class GeminiService {
     }
 
     /**
+     * Sends a message to Gemini with strict input validation.
+     *
+     * Unlike `chat()`, this method **throws** on invalid input
+     * rather than returning a soft error string. This makes it
+     * suitable for programmatic use and automated testing.
+     *
+     * @param   {string}           message - The user's plain-text message.
+     * @returns {Promise<string>}  The model's text reply.
+     * @throws  {Error}            If the message is empty or not a string.
+     * @throws  {Error}            If the API key is missing.
+     */
+    async sendMessage(message) {
+        /* ── Guard: empty or invalid message ── */
+        if (!message || typeof message !== 'string' || message.trim().length === 0) {
+            throw new Error('Message content cannot be empty');
+        }
+
+        /* ── Guard: missing API key ── */
+        if (!this.apiKey) {
+            throw new Error('API key is not configured');
+        }
+
+        /* ── Delegate to the core chat pipeline ── */
+        return await this.chat(message);
+    }
+
+    /**
      * Resets the conversation history to start a fresh session.
      *
      * @returns {void}
@@ -158,6 +224,20 @@ export class GeminiService {
         this.apiKey = newKey;
     }
 
+    /**
+     * Switches the active persona mode.
+     * Clears conversation history since the AI's behavior changes.
+     *
+     * @param {'fan'|'staff'} mode - The new persona mode.
+     * @returns {void}
+     */
+    setPersona(mode) {
+        if (mode !== this.persona && (mode === 'fan' || mode === 'staff')) {
+            this.persona = mode;
+            this.resetHistory();
+        }
+    }
+
     // ── Private Methods ──────────────────────────────────────
 
     /**
@@ -177,7 +257,8 @@ export class GeminiService {
      * @throws  {Error}           On network failure, timeout, or non-OK status.
      */
     async _sendRequest(contents) {
-        const url = `${GEMINI_ENDPOINT}?key=${this.apiKey}`;
+        const model = config.geminiModel || 'gemini-2.5-flash';
+        const url   = `${GEMINI_BASE_URL}/${model}:generateContent?key=${this.apiKey}`;
 
         const controller = new AbortController();
         const timeoutId  = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -188,7 +269,7 @@ export class GeminiService {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     systemInstruction: {
-                        parts: [{ text: SYSTEM_PERSONA }],
+                        parts: [{ text: this._buildSystemInstruction() }],
                     },
                     contents,
                 }),
@@ -205,6 +286,31 @@ export class GeminiService {
         } finally {
             clearTimeout(timeoutId);
         }
+    }
+
+    /**
+     * Builds the full system instruction by combining:
+     *  1. The base MatchDay Copilot persona.
+     *  2. Live stadium gate traffic data.
+     *  3. The active persona extension (Fan or Staff).
+     *
+     * @private
+     * @returns {string} The complete system instruction string.
+     */
+    _buildSystemInstruction() {
+        const gateStatus = Object.entries(stadiumState)
+            .map(([gate, status]) => `${gate}: ${status}`)
+            .join(' | ');
+
+        return [
+            SYSTEM_PERSONA,
+            '',
+            '--- REAL-TIME STADIUM STATE ---',
+            `Check the real-time stadium state for gate traffic before answering navigation questions: ${gateStatus}`,
+            '',
+            '--- ACTIVE PERSONA ---',
+            PERSONA_EXTENSIONS[this.persona] || PERSONA_EXTENSIONS.fan,
+        ].join('\n');
     }
 
     /**
@@ -269,16 +375,21 @@ export class GeminiService {
     }
 
     /**
-     * Trims conversation history to the configured maximum,
-     * always retaining the most recent messages.
+     * Trims conversation history to optimize memory efficiency.
+     *
+     * Enforces a hard cap of **10 messages** (5 user-model pairs)
+     * to minimize payload size on subsequent API calls. In a
+     * stadium environment with 80,000+ concurrent users, keeping
+     * the conversation context lean reduces per-request latency.
      *
      * @private
-     * @returns {void}
+     * @constant {number} MAX_HISTORY_LENGTH - Hard cap of 10 messages.
+     * @returns  {void}
      */
     _trimHistory() {
-        const maxEntries = config.maxChatHistory * 2; // user + model pairs
-        if (this.history.length > maxEntries) {
-            this.history = this.history.slice(-maxEntries);
+        const MAX_HISTORY_LENGTH = 10;
+        if (this.history.length > MAX_HISTORY_LENGTH) {
+            this.history = this.history.slice(-MAX_HISTORY_LENGTH);
         }
     }
 }
