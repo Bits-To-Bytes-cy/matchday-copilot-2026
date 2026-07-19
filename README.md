@@ -326,7 +326,7 @@ No `npm install`. No build step. No environment variables. Just serve and go.
 
 ## License
 
-Built for the **Google Gemini API Developer Competition 2025** — FIFA World Cup 2026 Smart Stadium Challenge.
+Built for the **PromptWars Virtual 2026** — FIFA World Cup 2026 Smart Stadium Challenge.
 
 ---
 
